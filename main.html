@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email to Excel Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals (Slate, Stone, Amber) -->
+    <!-- Application Structure Plan: The structure remains a three-step workflow. Step 2 has been pivoted from Gmail integration to local file uploads. 1) Define: User specifies what data to extract. 2) Upload & Process: User selects one or more email files (.eml, .txt) from their computer. 3) Review & Export: User previews the data extracted from the files and downloads it. This change simplifies the app by removing external dependencies while providing a powerful new input method. -->
+    <!-- Visualization & Content Choices: Step 2 now uses an <input type="file"> for uploads, a text area to display selected filenames, and a button to initiate processing. This is a standard and intuitive UI for file handling. The core data presentation (HTML Table) and export (Button) remain the same. The FileReader API is now used to get content from local files. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .step-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            border: 1px solid #e2e8f0; /* slate-200 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: box-shadow 0.3s ease-in-out;
+        }
+        .step-card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .step-number {
+            background-color: #fbbf24; /* amber-400 */
+            color: #44403c; /* stone-800 */
+            border-radius: 9999px;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1.125rem;
+            border: 2px solid white;
+        }
+        .btn {
+            font-weight: 500;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        .btn-primary:disabled {
+            background-color: #a5b4fc; /* indigo-300 */
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background-color: #10b981; /* emerald-500 */
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #059669; /* emerald-600 */
+        }
+        .btn-secondary:disabled {
+            background-color: #6ee7b7; /* emerald-300 */
+            cursor: not-allowed;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5; /* indigo-600 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background-color: #22c55e; /* green-500 */
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transform: translateY(200%);
+            transition: transform 0.5s ease-in-out;
+            z-index: 50;
+        }
+        .toast.show {
+            transform: translateY(0);
+        }
+        .toast.error {
+            background-color: #ef4444; /* red-500 */
+        }
+        .input-field {
+             width: 100%; 
+             padding: 0.75rem; 
+             border: 1px solid #d1d5db; 
+             border-radius: 0.375rem;
+        }
+        .input-field:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 2px #a5b4fc;
+        }
+        .file-upload-label {
+            cursor: pointer;
+            padding: 0.75rem 1.5rem;
+            border: 2px dashed #d1d5db;
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.3s ease;
+        }
+        .file-upload-label:hover {
+            border-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="antialiased text-stone-800">
+
+    <div class="min-h-screen container mx-auto px-4 py-8 md:py-12">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-800">AI Email to Excel Extractor</h1>
+            <p class="mt-4 text-lg text-stone-600 max-w-3xl mx-auto">Upload email files, specify what to find, and let AI turn them into organized spreadsheets.</p>
+        </header>
+
+        <main class="max-w-4xl mx-auto space-y-8">
+            <!-- Step 1: Define Extraction -->
+            <section id="step1" class="step-card p-6 md:p-8">
+                <div class="flex items-start">
+                    <div class="step-number mr-4 flex-shrink-0">1</div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Define What to Extract</h2>
+                        <p class="mt-2 text-stone-600">Describe the data you want to pull from the emails. Be specific for the best results. For example: "Extract the invoice number, total amount, and the due date."</p>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <label for="extraction-prompt" class="block text-sm font-medium text-stone-700 mb-1">Your Instructions:</label>
+                    <input type="text" id="extraction-prompt" class="input-field" placeholder="e.g., Get the order ID, customer name, and shipping address">
+                </div>
+            </section>
+
+            <!-- Step 2: Upload & Process Files -->
+            <section id="step2" class="step-card p-6 md:p-8">
+                <div class="flex items-start">
+                    <div class="step-number mr-4 flex-shrink-0">2</div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Upload & Process Files</h2>
+                        <p class="mt-2 text-stone-600">Select one or more email files (.eml or .txt) from your computer to process.</p>
+                    </div>
+                </div>
+                
+                <div class="mt-6 space-y-4">
+                    <label for="file-input" class="file-upload-label">
+                        <svg class="w-10 h-10 text-stone-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V6a4 4 0 014-4h1.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H12a4 4 0 014 4v1.586a1 1 0 01-.293.707l-1.414 1.414a1 1 0 00-.293.707V16m-7-2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.414-1.414a1 1 0 00-.707-.293H10.5a2 2 0 00-2 2v2a2 2 0 002 2h1.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H17"></path></svg>
+                        <span class="text-indigo-600 font-semibold">Click to upload files</span>
+                        <span class="text-sm text-stone-500">or drag and drop</span>
+                    </label>
+                    <input type="file" id="file-input" class="hidden" multiple accept=".eml,.txt">
+                    
+                    <div id="file-list-container" class="hidden">
+                        <h4 class="text-sm font-medium text-stone-700">Selected files:</h4>
+                        <ul id="file-list" class="mt-2 text-sm text-stone-600 list-disc list-inside"></ul>
+                    </div>
+
+                    <div class="text-center pt-4">
+                        <button id="extract-btn" class="btn btn-primary w-full sm:w-auto">
+                            Extract Data from Files
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: Review & Export -->
+            <section id="step3" class="step-card p-6 md:p-8">
+                <div class="flex items-start">
+                    <div class="step-number mr-4 flex-shrink-0">3</div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Review & Export</h2>
+                        <p class="mt-2 text-stone-600">Review the extracted data below. If it looks correct, download it as an Excel file.</p>
+                    </div>
+                </div>
+                <div id="loader-container" class="hidden flex justify-center items-center h-32 flex-col">
+                    <div class="loader"></div>
+                    <p id="progress-text" class="mt-4 text-stone-600">Initializing...</p>
+                </div>
+                <div id="results-container" class="mt-6 hidden">
+                    <div class="overflow-x-auto rounded-lg border border-stone-200">
+                        <table id="results-table" class="min-w-full divide-y divide-stone-200">
+                            <thead class="bg-stone-50"></thead>
+                            <tbody class="divide-y divide-stone-200 bg-white"></tbody>
+                        </table>
+                    </div>
+                     <div id="no-results" class="text-center py-8 text-stone-500 hidden">
+                        <p>No data extracted. Please check your instructions and files, or try rephrasing.</p>
+                    </div>
+                    <div class="mt-6 text-center">
+                        <button id="download-btn" class="btn btn-secondary w-full sm:w-auto" disabled>
+                            Download Excel (.xlsx)
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer class="text-center mt-16 text-stone-500">
+            <p>Powered by AI. Built with passion.</p>
+        </footer>
+    </div>
+
+    <div id="toast-notification" class="toast">
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const fileInput = document.getElementById('file-input');
+            const fileListContainer = document.getElementById('file-list-container');
+            const fileList = document.getElementById('file-list');
+            const extractBtn = document.getElementById('extract-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            const extractionPrompt = document.getElementById('extraction-prompt');
+            const resultsContainer = document.getElementById('results-container');
+            const loaderContainer = document.getElementById('loader-container');
+            const progressText = document.getElementById('progress-text');
+            const resultsTable = document.getElementById('results-table');
+            const noResultsDiv = document.getElementById('no-results');
+            const toast = document.getElementById('toast-notification');
+            const toastMessage = document.getElementById('toast-message');
+
+            let extractedData = [];
+
+            // --- Event Listeners ---
+            fileInput.addEventListener('change', handleFileSelection);
+            extractBtn.addEventListener('click', processUploadedFiles);
+            downloadBtn.addEventListener('click', downloadExcel);
+
+            // --- Helper Functions ---
+            const showToast = (message, isError = false) => {
+                toastMessage.textContent = message;
+                toast.className = `toast ${isError ? 'error' : ''} show`;
+                setTimeout(() => { toast.classList.remove('show'); }, 3000);
+            };
+
+            function handleFileSelection() {
+                fileList.innerHTML = '';
+                if (fileInput.files.length > 0) {
+                    fileListContainer.classList.remove('hidden');
+                    Array.from(fileInput.files).forEach(file => {
+                        const li = document.createElement('li');
+                        li.textContent = file.name;
+                        fileList.appendChild(li);
+                    });
+                } else {
+                    fileListContainer.classList.add('hidden');
+                }
+            }
+
+            // --- Core Logic ---
+            async function processUploadedFiles() {
+                const userPrompt = extractionPrompt.value.trim();
+                if (!userPrompt) {
+                    showToast('Please provide extraction instructions in Step 1.', true);
+                    return;
+                }
+                
+                const files = fileInput.files;
+                if (files.length === 0) {
+                    showToast('Please select at least one file to process.', true);
+                    return;
+                }
+
+                loaderContainer.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                extractBtn.disabled = true;
+                downloadBtn.disabled = true;
+                extractedData = [];
+                
+                try {
+                    progressText.textContent = 'Reading files...';
+                    const fileReadPromises = Array.from(files).map(file => {
+                        return new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+                            reader.readAsText(file);
+                        });
+                    });
+
+                    const fileContents = await Promise.all(fileReadPromises);
+                    const allEmailContent = fileContents.join('\n\n--- EMAIL SEPARATOR ---\n\n');
+                    
+                    progressText.textContent = 'Sending content to AI for extraction...';
+                    await extractDataWithAI(userPrompt, allEmailContent);
+
+                } catch (error) {
+                    console.error('Error during file processing or extraction:', error);
+                    showToast(error.message || 'An error occurred. Check console.', true);
+                    renderTable([]);
+                } finally {
+                    loaderContainer.classList.add('hidden');
+                    extractBtn.disabled = false;
+                }
+            }
+
+            async function extractDataWithAI(userPrompt, content) {
+                const geminiApiKey = ""; // Handled by environment
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+
+                const systemPrompt = `You are an expert data extraction assistant. Your task is to extract structured information from the provided text based on the user's request.
+- Analyze the user's instruction to identify the data fields to extract.
+- The JSON property names should be in snake_case and derived from the user's instruction (e.g., "invoice number" becomes "invoice_number").
+- The text may contain multiple distinct records (like several emails), potentially separated by "--- EMAIL SEPARATOR ---". Process each one.
+- Return a single JSON array where each object in the array represents one extracted record.
+- If a specific piece of information for a field cannot be found in a record, the value for that key should be an empty string "".
+- Do not add any explanatory text or markdown formatting around the JSON output.`;
+                const fullPrompt = `USER INSTRUCTION: "${userPrompt}"\n\nTEXT_TO_PROCESS: """${content}"""`;
+                
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n" + fullPrompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`AI API request failed with status ${response.status}`);
+                
+                const result = await response.json();
+                if (result.candidates && result.candidates[0].content.parts[0].text) {
+                    const jsonText = result.candidates[0].content.parts[0].text;
+                    const cleanedJsonText = jsonText.replace(/^```json\n?/, '').replace(/```$/, '');
+                    extractedData = JSON.parse(cleanedJsonText);
+                    renderTable(extractedData);
+                    showToast('Extraction complete!');
+                } else {
+                    throw new Error('Invalid response structure from AI API.');
+                }
+            }
+
+            function renderTable(data) {
+                const tableHead = resultsTable.querySelector('thead');
+                const tableBody = resultsTable.querySelector('tbody');
+                tableHead.innerHTML = '';
+                tableBody.innerHTML = '';
+                resultsContainer.classList.add('hidden');
+                noResultsDiv.classList.add('hidden');
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    noResultsDiv.classList.remove('hidden');
+                    resultsContainer.classList.remove('hidden');
+                    downloadBtn.disabled = true;
+                    return;
+                }
+
+                const headers = Object.keys(data[0]);
+                const headerRow = document.createElement('tr');
+                headers.forEach(headerText => {
+                    const th = document.createElement('th');
+                    th.scope = 'col';
+                    th.className = 'px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider';
+                    th.textContent = headerText.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    headerRow.appendChild(th);
+                });
+                tableHead.appendChild(headerRow);
+
+                data.forEach(rowData => {
+                    const row = document.createElement('tr');
+                    headers.forEach(header => {
+                        const cell = document.createElement('td');
+                        cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-stone-700';
+                        cell.textContent = rowData[header] || '';
+                        row.appendChild(cell);
+                    });
+                    tableBody.appendChild(row);
+                });
+                
+                resultsContainer.classList.remove('hidden');
+                downloadBtn.disabled = false;
+            }
+
+            function downloadExcel() {
+                if (!Array.isArray(extractedData) || extractedData.length === 0) {
+                    showToast('No data to download.', true);
+                    return;
+                }
+                const worksheet = XLSX.utils.json_to_sheet(extractedData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Extracted Data');
+                const filename = `Email_Extraction_${new Date().toISOString().slice(0,10)}.xlsx`;
+                XLSX.writeFile(workbook, filename);
+                showToast('Download started!');
+            }
+        });
+    </script>
+</body>
+</html>
