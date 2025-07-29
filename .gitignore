@@ -1,0 +1,10 @@
+# Configuration files containing sensitive data
+config.js
+
+# IDE and editor directories
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db

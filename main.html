@@ -227,6 +227,7 @@
         <span id="toast-message"></span>
     </div>
 
+    <script src="config.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- DOM Elements ---
@@ -286,6 +287,11 @@
                     return;
                 }
 
+                if (typeof API_CONFIG === 'undefined' || !API_CONFIG.GEMINI_API_KEY) {
+                    showToast('API Key not found. Please check your config.js file.', true);
+                    return;
+                }
+
                 loaderContainer.classList.remove('hidden');
                 resultsContainer.classList.add('hidden');
                 extractBtn.disabled = true;
@@ -320,21 +326,25 @@
             }
 
             async function extractDataWithAI(userPrompt, content) {
-                const geminiApiKey = ""; // Handled by environment
+                const geminiApiKey = API_CONFIG.GEMINI_API_KEY;
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
 
                 const systemPrompt = `You are an expert data extraction assistant. Your task is to extract structured information from the provided text based on the user's request.
 - Analyze the user's instruction to identify the data fields to extract.
-- The JSON property names should be in snake_case and derived from the user's instruction (e.g., "invoice number" becomes "invoice_number").
-- The text may contain multiple distinct records (like several emails), potentially separated by "--- EMAIL SEPARATOR ---". Process each one.
-- Return a single JSON array where each object in the array represents one extracted record.
+- The JSON property names MUST be in double quotes and snake_case, derived from the user's instruction (e.g., "invoice number" becomes "invoice_number").
+- The text may contain multiple distinct records. Process each one.
+- Return a single, valid JSON array where each object in the array represents one extracted record.
 - If a specific piece of information for a field cannot be found in a record, the value for that key should be an empty string "".
-- Do not add any explanatory text or markdown formatting around the JSON output.`;
+- Your entire response must be ONLY the JSON array. Do NOT include any explanatory text, markdown formatting (like \`\`\`json), comments, or any characters outside of the JSON array.`;
+                
                 const fullPrompt = `USER INSTRUCTION: "${userPrompt}"\n\nTEXT_TO_PROCESS: """${content}"""`;
                 
                 const payload = {
                     contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n" + fullPrompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        maxOutputTokens: 8192
+                    }
                 };
 
                 const response = await fetch(apiUrl, {
@@ -346,12 +356,17 @@
                 if (!response.ok) throw new Error(`AI API request failed with status ${response.status}`);
                 
                 const result = await response.json();
-                if (result.candidates && result.candidates[0].content.parts[0].text) {
+                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts[0].text) {
                     const jsonText = result.candidates[0].content.parts[0].text;
-                    const cleanedJsonText = jsonText.replace(/^```json\n?/, '').replace(/```$/, '');
-                    extractedData = JSON.parse(cleanedJsonText);
-                    renderTable(extractedData);
-                    showToast('Extraction complete!');
+                    try {
+                        extractedData = JSON.parse(jsonText);
+                        renderTable(extractedData);
+                        showToast('Extraction complete!');
+                    } catch (e) {
+                        console.error('AI Output was not valid JSON:', jsonText);
+                        showToast('Extraction failed: AI returned invalid data format. See console for details.', true);
+                        renderTable([]);
+                    }
                 } else {
                     throw new Error('Invalid response structure from AI API.');
                 }
@@ -414,3 +429,4 @@
     </script>
 </body>
 </html>
+
