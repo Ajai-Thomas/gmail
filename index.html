@@ -251,7 +251,7 @@
             const showToast = (message, isError = false) => {
                 toastMessage.textContent = message;
                 toast.className = `toast ${isError ? 'error' : ''} show`;
-                setTimeout(() => { toast.classList.remove('show'); }, 3000);
+                setTimeout(() => { toast.classList.remove('show'); }, 4000);
             };
 
             function handleFileSelection() {
@@ -326,11 +326,24 @@
                 });
 
                 if (!response.ok) {
-                    const errorResult = await response.json();
-                    throw new Error(errorResult.error || `Request failed with status ${response.status}`);
+                    let errorMessage = `Request failed with status ${response.status}.`;
+                    try {
+                        const errorResult = await response.json();
+                        errorMessage = errorResult.error || errorMessage;
+                    } catch (e) {
+                        // The error response wasn't JSON. It might be a gateway timeout.
+                        errorMessage += " The server may have timed out. Try processing fewer files at once.";
+                    }
+                    throw new Error(errorMessage);
                 }
                 
-                const result = await response.json();
+                // Check for empty response body before parsing
+                const responseText = await response.text();
+                if (!responseText) {
+                    throw new Error("Received an empty response from the server. This can happen if the request times out. Please try with fewer files.");
+                }
+
+                const result = JSON.parse(responseText);
 
                 if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts[0].text) {
                     const jsonText = result.candidates[0].content.parts[0].text;
@@ -343,7 +356,10 @@
                         showToast('Extraction failed: AI returned invalid data format. See console for details.', true);
                         renderTable([]);
                     }
-                } else {
+                } else if (result.error) {
+                     throw new Error(`AI API Error: ${result.error.message}`);
+                }
+                else {
                     throw new Error('Invalid response structure from AI proxy.');
                 }
             }
@@ -371,7 +387,7 @@
                     th.className = 'px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider';
                     th.textContent = headerText.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                     headerRow.appendChild(th);
-                });
+});
                 tableHead.appendChild(headerRow);
 
                 data.forEach(rowData => {
@@ -405,4 +421,3 @@
     </script>
 </body>
 </html>
-
