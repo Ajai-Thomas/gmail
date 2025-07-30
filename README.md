@@ -1,12 +1,12 @@
 AI-Powered Email to Excel Extractor
 A simple yet powerful web application that uses the Google Gemini API to extract structured data from the text of email files and exports it to an Excel spreadsheet.
 
-➡️ View Live Demo (Replace with your actual Netlify URL after publishing)
+
 
 Overview
 This tool is designed to automate the tedious process of manually copying and pasting information from emails. Users can upload one or more email files (as .txt or .eml), provide a simple instruction in plain English (e.g., "Get the invoice number, total amount, and due date"), and the application will use AI to parse the files and present the extracted data in a clean table, ready to be downloaded as an .xlsx file.
 
-(Optional: Replace with a link to a screenshot of your app)
+
 
 Features
 AI-Powered Extraction: Leverages the Google Gemini API to understand natural language instructions and intelligently parse data.
