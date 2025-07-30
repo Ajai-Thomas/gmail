@@ -1,0 +1,13 @@
+# This file tells Netlify how to build and deploy your site.
+
+[build]
+  # This command is not needed for a simple HTML site, but it's good practice to have.
+  command = "# No build command"
+  
+  # The folder that contains your serverless functions.
+  # This is the most important line for fixing your issue.
+  functions = "netlify/functions/"
+  
+  # The folder to publish. For a single HTML file in the root, this is the root.
+  publish = "/"
+
