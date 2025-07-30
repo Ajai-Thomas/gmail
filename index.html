@@ -9,10 +9,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Chosen Palette: Warm Neutrals (Slate, Stone, Amber) -->
-    <!-- Application Structure Plan: The structure remains a three-step workflow. Step 2 has been pivoted from Gmail integration to local file uploads. 1) Define: User specifies what data to extract. 2) Upload & Process: User selects one or more email files (.eml, .txt) from their computer. 3) Review & Export: User previews the data extracted from the files and downloads it. This change simplifies the app by removing external dependencies while providing a powerful new input method. -->
-    <!-- Visualization & Content Choices: Step 2 now uses an <input type="file"> for uploads, a text area to display selected filenames, and a button to initiate processing. This is a standard and intuitive UI for file handling. The core data presentation (HTML Table) and export (Button) remain the same. The FileReader API is now used to get content from local files. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -227,7 +223,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="config.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- DOM Elements ---
@@ -287,11 +282,6 @@
                     return;
                 }
 
-                if (typeof API_CONFIG === 'undefined' || !API_CONFIG.GEMINI_API_KEY) {
-                    showToast('API Key not found. Please check your config.js file.', true);
-                    return;
-                }
-
                 loaderContainer.classList.remove('hidden');
                 resultsContainer.classList.add('hidden');
                 extractBtn.disabled = true;
@@ -326,36 +316,22 @@
             }
 
             async function extractDataWithAI(userPrompt, content) {
-                const geminiApiKey = API_CONFIG.GEMINI_API_KEY;
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
-
-                const systemPrompt = `You are an expert data extraction assistant. Your task is to extract structured information from the provided text based on the user's request.
-- Analyze the user's instruction to identify the data fields to extract.
-- The JSON property names MUST be in double quotes and snake_case, derived from the user's instruction (e.g., "invoice number" becomes "invoice_number").
-- The text may contain multiple distinct records. Process each one.
-- Return a single, valid JSON array where each object in the array represents one extracted record.
-- If a specific piece of information for a field cannot be found in a record, the value for that key should be an empty string "".
-- Your entire response must be ONLY the JSON array. Do NOT include any explanatory text, markdown formatting (like \`\`\`json), comments, or any characters outside of the JSON array.`;
-                
-                const fullPrompt = `USER INSTRUCTION: "${userPrompt}"\n\nTEXT_TO_PROCESS: """${content}"""`;
-                
-                const payload = {
-                    contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n" + fullPrompt }] }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        maxOutputTokens: 8192
-                    }
-                };
+                // The URL for our Netlify serverless function
+                const apiUrl = '/.netlify/functions/get-ai-responses';
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ userPrompt, content })
                 });
 
-                if (!response.ok) throw new Error(`AI API request failed with status ${response.status}`);
+                if (!response.ok) {
+                    const errorResult = await response.json();
+                    throw new Error(errorResult.error || `Request failed with status ${response.status}`);
+                }
                 
                 const result = await response.json();
+
                 if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts[0].text) {
                     const jsonText = result.candidates[0].content.parts[0].text;
                     try {
@@ -368,7 +344,7 @@
                         renderTable([]);
                     }
                 } else {
-                    throw new Error('Invalid response structure from AI API.');
+                    throw new Error('Invalid response structure from AI proxy.');
                 }
             }
 
